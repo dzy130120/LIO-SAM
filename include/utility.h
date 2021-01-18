@@ -81,7 +81,7 @@ public:
 
     // GPS Settings
     bool useImuHeadingInitialization;
-    bool useGpsElevation;
+    bool useGpsElevation;//海拔高度
     float gpsCovThreshold;
     float poseCovThreshold;
 
@@ -91,8 +91,8 @@ public:
 
     // Lidar Sensor Configuration
     SensorType sensor;
-    int N_SCAN;
-    int Horizon_SCAN;
+    int N_SCAN;//雷达线数
+    int Horizon_SCAN;//每圈扫描点数
     int downsampleRate;
     float lidarMinRange;
     float lidarMaxRange;
@@ -113,8 +113,8 @@ public:
     Eigen::Quaterniond extQRPY;
 
     // LOAM
-    float edgeThreshold;
-    float surfThreshold;
+    float edgeThreshold;//判断粗糙度的阈值，大的为边
+    float surfThreshold;//判断粗糙度的阈值，小的为面
     int edgeFeatureMinValidNum;
     int surfFeatureMinValidNum;
 
@@ -131,8 +131,8 @@ public:
     double mappingProcessInterval;
 
     // Surrounding map
-    float surroundingkeyframeAddingDistThreshold; 
-    float surroundingkeyframeAddingAngleThreshold; 
+    float surroundingkeyframeAddingDistThreshold; //添加关键帧距离阈值
+    float surroundingkeyframeAddingAngleThreshold; //添加关键帧角度阈值
     float surroundingKeyframeDensity;
     float surroundingKeyframeSearchRadius;
     
@@ -244,7 +244,7 @@ public:
         usleep(100);
     }
 
-    sensor_msgs::Imu imuConverter(const sensor_msgs::Imu& imu_in)
+    sensor_msgs::Imu imuConverter(const sensor_msgs::Imu& imu_in)//imu转换到雷达坐标系下
     {
         sensor_msgs::Imu imu_out = imu_in;
         // rotate acceleration
