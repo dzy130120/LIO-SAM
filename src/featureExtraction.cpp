@@ -52,7 +52,7 @@ public:
     {
         cloudSmoothness.resize(N_SCAN*Horizon_SCAN);
 
-        downSizeFilter.setLeafSize(odometrySurfLeafSize, odometrySurfLeafSize, odometrySurfLeafSize);
+        downSizeFilter.setLeafSize(odometrySurfLeafSize, odometrySurfLeafSize, odometrySurfLeafSize);//边和面的体素滤波
 
         extractedCloud.reset(new pcl::PointCloud<PointType>());
         cornerCloud.reset(new pcl::PointCloud<PointType>());
@@ -63,7 +63,7 @@ public:
         cloudLabel = new int[N_SCAN*Horizon_SCAN];
     }
 
-    void laserCloudInfoHandler(const lio_sam::cloud_infoConstPtr& msgIn)
+    void laserCloudInfoHandler(const lio_sam::cloud_infoConstPtr& msgIn)//订阅雷达点云深度图消息回调函数
     {
         cloudInfo = *msgIn; // new cloud info
         cloudHeader = msgIn->header; // new cloud header
@@ -78,7 +78,7 @@ public:
         publishFeatureCloud();
     }
 
-    void calculateSmoothness()
+    void calculateSmoothness()//计算平滑
     {
         int cloudSize = extractedCloud->points.size();
         for (int i = 5; i < cloudSize - 5; i++)
@@ -100,7 +100,7 @@ public:
         }
     }
 
-    void markOccludedPoints()
+    void markOccludedPoints()//标记遮挡点
     {
         int cloudSize = extractedCloud->points.size();
         // mark occluded points and parallel beam points
@@ -111,16 +111,20 @@ public:
             float depth2 = cloudInfo.pointRange[i+1];
             int columnDiff = std::abs(int(cloudInfo.pointColInd[i+1] - cloudInfo.pointColInd[i]));
 
-            if (columnDiff < 10){
+            if (columnDiff < 10)//判断是否在列的邻域
+            {
                 // 10 pixel diff in range image
-                if (depth1 - depth2 > 0.3){
+                if (depth1 - depth2 > 0.3)//相邻的深度差大于30cm
+                {
                     cloudNeighborPicked[i - 5] = 1;
                     cloudNeighborPicked[i - 4] = 1;
                     cloudNeighborPicked[i - 3] = 1;
                     cloudNeighborPicked[i - 2] = 1;
                     cloudNeighborPicked[i - 1] = 1;
                     cloudNeighborPicked[i] = 1;
-                }else if (depth2 - depth1 > 0.3){
+                }
+                else if (depth2 - depth1 > 0.3)
+                {
                     cloudNeighborPicked[i + 1] = 1;
                     cloudNeighborPicked[i + 2] = 1;
                     cloudNeighborPicked[i + 3] = 1;
@@ -157,21 +161,26 @@ public:
                 int ep = (cloudInfo.startRingIndex[i] * (5 - j) + cloudInfo.endRingIndex[i] * (j + 1)) / 6 - 1;
 
                 if (sp >= ep)
+                {
                     continue;
+                }
 
-                std::sort(cloudSmoothness.begin()+sp, cloudSmoothness.begin()+ep, by_value());
+                std::sort(cloudSmoothness.begin()+sp, cloudSmoothness.begin()+ep, by_value());//对sp到ep的平滑数值进行排序
 
                 int largestPickedNum = 0;
                 for (int k = ep; k >= sp; k--)
                 {
                     int ind = cloudSmoothness[k].ind;
-                    if (cloudNeighborPicked[ind] == 0 && cloudCurvature[ind] > edgeThreshold)
+                    if (cloudNeighborPicked[ind] == 0 && cloudCurvature[ind] > edgeThreshold)//满足粗糙程度大于阈值的作为变特征
                     {
                         largestPickedNum++;
-                        if (largestPickedNum <= 20){
+                        if (largestPickedNum <= 20)
+                        {
                             cloudLabel[ind] = 1;
                             cornerCloud->push_back(extractedCloud->points[ind]);
-                        } else {
+                        }
+                        else
+                        {
                             break;
                         }
 
@@ -202,7 +211,8 @@ public:
                         cloudLabel[ind] = -1;
                         cloudNeighborPicked[ind] = 1;
 
-                        for (int l = 1; l <= 5; l++) {
+                        for (int l = 1; l <= 5; l++)
+                        {
 
                             int columnDiff = std::abs(int(cloudInfo.pointColInd[ind + l] - cloudInfo.pointColInd[ind + l - 1]));
                             if (columnDiff > 10)
@@ -210,7 +220,8 @@ public:
 
                             cloudNeighborPicked[ind + l] = 1;
                         }
-                        for (int l = -1; l >= -5; l--) {
+                        for (int l = -1; l >= -5; l--)
+                        {
 
                             int columnDiff = std::abs(int(cloudInfo.pointColInd[ind + l] - cloudInfo.pointColInd[ind + l + 1]));
                             if (columnDiff > 10)
@@ -223,7 +234,8 @@ public:
 
                 for (int k = sp; k <= ep; k++)
                 {
-                    if (cloudLabel[k] <= 0){
+                    if (cloudLabel[k] <= 0)
+                    {
                         surfaceCloudScan->push_back(extractedCloud->points[k]);
                     }
                 }
@@ -231,13 +243,13 @@ public:
 
             surfaceCloudScanDS->clear();
             downSizeFilter.setInputCloud(surfaceCloudScan);
-            downSizeFilter.filter(*surfaceCloudScanDS);
+            downSizeFilter.filter(*surfaceCloudScanDS);//只对面特征进行了降采样，边特征没有降采样
 
             *surfaceCloud += *surfaceCloudScanDS;
         }
     }
 
-    void freeCloudInfoMemory()
+    void freeCloudInfoMemory()//释放接收消息的内存
     {
         cloudInfo.startRingIndex.clear();
         cloudInfo.endRingIndex.clear();
