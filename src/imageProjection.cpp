@@ -142,7 +142,7 @@ public:
 
     ~ImageProjection(){}
 
-    void imuHandler(const sensor_msgs::Imu::ConstPtr& imuMsg)
+    void imuHandler(const sensor_msgs::Imu::ConstPtr& imuMsg)//缓存imu数据
     {
         sensor_msgs::Imu thisImu = imuConverter(*imuMsg);
 
@@ -167,13 +167,13 @@ public:
         // cout << "roll: " << imuRoll << ", pitch: " << imuPitch << ", yaw: " << imuYaw << endl << endl;
     }
 
-    void odometryHandler(const nav_msgs::Odometry::ConstPtr& odometryMsg)
+    void odometryHandler(const nav_msgs::Odometry::ConstPtr& odometryMsg)//缓存里程计
     {
         std::lock_guard<std::mutex> lock2(odoLock);
         odomQueue.push_back(*odometryMsg);
     }
 
-    void cloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg)
+    void cloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg)//缓存激光点云数据
     {
         if (!cachePointCloud(laserCloudMsg))
             return;
@@ -234,6 +234,7 @@ public:
         timeScanEnd = timeScanCur + laserCloudIn->points.back().time;
 
         // check dense flag
+        laserCloudIn->is_dense = true;
         if (laserCloudIn->is_dense == false)
         {
             ROS_ERROR("Point cloud is not in dense format, please remove NaN points first!");
@@ -266,7 +267,7 @@ public:
             deskewFlag = -1;
             for (auto &field : currentCloudMsg.fields)
             {
-                if (field.name == "time" || field.name == "t")
+                if (field.name == "timestamp" || field.name == "t")
                 {
                     deskewFlag = 1;
                     break;
