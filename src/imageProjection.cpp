@@ -580,7 +580,7 @@ public:
                     // mark the points' column index for marking occlusion later
                     cloudInfo.pointColInd[count] = j;
                     // save range info
-                    cloudInfo.pointRange[count] = rangeMat.at<float>(i,j);
+                    cloudInfo.pointRange[count] = rangeMat.at<float>(i,j);//序列化了range
                     // save extracted cloud
                     extractedCloud->push_back(fullCloud->points[j + i*Horizon_SCAN]);//这个是fullCloud的子集
                     // size of extracted cloud
