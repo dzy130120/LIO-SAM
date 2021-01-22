@@ -247,7 +247,7 @@ public:
 
             updateInitialGuess();
 
-            extractSurroundingKeyFrames();//查找回环候选关键帧以及这些候选帧的特征点云
+            extractSurroundingKeyFrames();//查找周围相邻关键帧以及这些关键帧的特征点云
 
             downsampleCurrentScan();//对特征提取发过来的特征点云进行降采样
 
@@ -832,20 +832,20 @@ public:
                 // transformed cloud not available
                 pcl::PointCloud<PointType> laserCloudCornerTemp = *transformPointCloud(cornerCloudKeyFrames[thisKeyInd],  &cloudKeyPoses6D->points[thisKeyInd]);//根据不关键帧六自由度位姿将边特征变换到地图系下
                 pcl::PointCloud<PointType> laserCloudSurfTemp = *transformPointCloud(surfCloudKeyFrames[thisKeyInd],    &cloudKeyPoses6D->points[thisKeyInd]);//根据不关键帧六自由度位姿将面特征变换到地图系下
-                *laserCloudCornerFromMap += laserCloudCornerTemp;//填到回环检测候选帧的边特征中
-                *laserCloudSurfFromMap   += laserCloudSurfTemp;//填到回环检测候选帧的面特征中
+                *laserCloudCornerFromMap += laserCloudCornerTemp;//填到当前关键帧周围关键帧的边特征中
+                *laserCloudSurfFromMap   += laserCloudSurfTemp;//填到当前关键帧周围关键帧的面特征中
                 laserCloudMapContainer[thisKeyInd] = make_pair(laserCloudCornerTemp, laserCloudSurfTemp);//向特征地图中添加新关键帧特征点云
             }
             
         }
 
         // Downsample the surrounding corner key frames (or map)
-        downSizeFilterCorner.setInputCloud(laserCloudCornerFromMap);//降采样，由于是多个候选帧加入的，所以会有重复特征
+        downSizeFilterCorner.setInputCloud(laserCloudCornerFromMap);//降采样，由于是多个附近的关键帧点云加入的，所以会有重复特征
         downSizeFilterCorner.filter(*laserCloudCornerFromMapDS);
         laserCloudCornerFromMapDSNum = laserCloudCornerFromMapDS->size();
         // Downsample the surrounding surf key frames (or map)
         downSizeFilterSurf.setInputCloud(laserCloudSurfFromMap);
-        downSizeFilterSurf.filter(*laserCloudSurfFromMapDS);
+        downSizeFilterSurf.filter(*laserCloudSurfFromMapDS);//scan2matchmap用的submap就是这个点云，代码目前逻辑与论文不同了
         laserCloudSurfFromMapDSNum = laserCloudSurfFromMapDS->size();
 
         // clear map cache if too large
@@ -857,10 +857,10 @@ public:
     {
         if (cloudKeyPoses3D->points.empty() == true)
             return; 
-        
+        //注掉这部分应该是与论文对应的逻辑，但目前代码里已经不使用时序上相邻的25帧了，而是改为使用当前帧一个搜索半径内的所有关键帧构建submap，后者更合理
         // if (loopClosureEnableFlag == true)
         // {
-        //     extractForLoopClosure();    
+        //     extractForLoopClosure();
         // } else {
         //     extractNearby();
         // }
@@ -1106,7 +1106,7 @@ public:
         float crz = cos(transformTobeMapped[0]);
 
         int laserCloudSelNum = laserCloudOri->size();
-        if (laserCloudSelNum < 50)
+        if (laserCloudSelNum < 50)//特征数量小于50返回false
         {
             return false;
         }
@@ -1159,7 +1159,8 @@ public:
         matAtB = matAt * matB;
         cv::solve(matAtA, matAtB, matX, cv::DECOMP_QR);
 
-        if (iterCount == 0) {
+        if (iterCount == 0)
+        {
 
             cv::Mat matE(1, 6, CV_32F, cv::Scalar::all(0));
             cv::Mat matV(6, 6, CV_32F, cv::Scalar::all(0));
@@ -1170,13 +1171,18 @@ public:
 
             isDegenerate = false;
             float eignThre[6] = {100, 100, 100, 100, 100, 100};
-            for (int i = 5; i >= 0; i--) {
-                if (matE.at<float>(0, i) < eignThre[i]) {
-                    for (int j = 0; j < 6; j++) {
+            for (int i = 5; i >= 0; i--)
+            {
+                if (matE.at<float>(0, i) < eignThre[i])
+                {
+                    for (int j = 0; j < 6; j++)
+                    {
                         matV2.at<float>(i, j) = 0;
                     }
                     isDegenerate = true;
-                } else {
+                }
+                else
+                {
                     break;
                 }
             }
@@ -1206,7 +1212,8 @@ public:
                             pow(matX.at<float>(4, 0) * 100, 2) +
                             pow(matX.at<float>(5, 0) * 100, 2));
 
-        if (deltaR < 0.05 && deltaT < 0.05) {
+        if (deltaR < 0.05 && deltaT < 0.05)
+        {
             return true; // converged
         }
         return false; // keep optimizing
@@ -1217,7 +1224,7 @@ public:
         if (cloudKeyPoses3D->points.empty())
             return;
 
-        if (laserCloudCornerLastDSNum > edgeFeatureMinValidNum && laserCloudSurfLastDSNum > surfFeatureMinValidNum)//当提取到的特征大于设置的限制进行scan2mapmatch
+        if (laserCloudCornerLastDSNum > edgeFeatureMinValidNum && laserCloudSurfLastDSNum > surfFeatureMinValidNum)//当提取到的特征大于设置的数量才进行scan2mapmatch
         {
             kdtreeCornerFromMap->setInputCloud(laserCloudCornerFromMapDS);
             kdtreeSurfFromMap->setInputCloud(laserCloudSurfFromMapDS);
