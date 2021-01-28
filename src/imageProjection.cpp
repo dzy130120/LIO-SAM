@@ -1,17 +1,17 @@
 #include "utility.h"
 #include "lio_sam/cloud_info.h"
-
+#include <stdio.h>
 struct VelodynePointXYZIRT
 {
     PCL_ADD_POINT4D
     PCL_ADD_INTENSITY;
     uint16_t ring;
-    float time;
+    double time;
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 } EIGEN_ALIGN16;
 POINT_CLOUD_REGISTER_POINT_STRUCT (VelodynePointXYZIRT,
     (float, x, x) (float, y, y) (float, z, z) (float, intensity, intensity)
-    (uint16_t, ring, ring) (float, time, time)
+    (uint16_t, ring, ring) (double, time, time)
 )
 
 struct OusterPointXYZIRT {
@@ -203,6 +203,13 @@ public:
         if (sensor == SensorType::VELODYNE)
         {
             pcl::moveFromROSMsg(currentCloudMsg, *laserCloudIn);
+//            printf("=================\n");
+//            for(int i=0;i<10;i++)
+//            {
+//              printf("time: %.8f\t",laserCloudIn->points[i].time);
+
+//            }
+//            printf("=================\n");
         }
         else if (sensor == SensorType::OUSTER)
         {
@@ -267,7 +274,7 @@ public:
             deskewFlag = -1;
             for (auto &field : currentCloudMsg.fields)
             {
-                if (field.name == "timestamp" || field.name == "t")//每个点要有相对时间戳
+                if (field.name == "timestamp" || field.name == "time")//每个点要有相对时间戳
                 {
                     deskewFlag = 1;
                     break;
