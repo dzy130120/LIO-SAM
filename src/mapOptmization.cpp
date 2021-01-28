@@ -251,7 +251,7 @@ public:
 
             downsampleCurrentScan();//对特征提取发过来的特征点云进行降采样
 
-            scan2MapOptimization();//scan与subkeyframe匹配
+            scan2MapOptimization();//scan与subkeyframe匹配，此时代码中的submap构建已经和论文不同了
 
             saveKeyFramesAndFactor();//添加因子并完成优化计算
 
@@ -1319,7 +1319,7 @@ public:
         if (cloudKeyPoses3D->points.empty())
         {
             noiseModel::Diagonal::shared_ptr priorNoise = noiseModel::Diagonal::Variances((Vector(6) << 1e-2, 1e-2, M_PI*M_PI, 1e8, 1e8, 1e8).finished()); // rad*rad, meter*meter
-            gtSAMgraph.add(PriorFactor<Pose3>(0, trans2gtsamPose(transformTobeMapped), priorNoise));
+            gtSAMgraph.add(PriorFactor<Pose3>(0, trans2gtsamPose(transformTobeMapped), priorNoise));//当keyframe为空时添加坐标原点
             initialEstimate.insert(0, trans2gtsamPose(transformTobeMapped));
         }
         else
@@ -1403,7 +1403,7 @@ public:
                 gtsam::Vector Vector3(3);
                 Vector3 << max(noise_x, 1.0f), max(noise_y, 1.0f), max(noise_z, 1.0f);
                 noiseModel::Diagonal::shared_ptr gps_noise = noiseModel::Diagonal::Variances(Vector3);
-                gtsam::GPSFactor gps_factor(cloudKeyPoses3D->size(), gtsam::Point3(gps_x, gps_y, gps_z), gps_noise);
+                gtsam::GPSFactor gps_factor(cloudKeyPoses3D->size(), gtsam::Point3(gps_x, gps_y, gps_z), gps_noise);//增加了个一元因子，因子的key（index）是keyframe中最新的
                 gtSAMgraph.add(gps_factor);
 
                 aLoopIsClosed = true;
