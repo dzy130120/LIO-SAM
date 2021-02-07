@@ -24,7 +24,7 @@ class TransformFusion : public ParamServer
 {
 public:
     std::mutex mtx;
-
+    ros::Subscriber subPoseOdomToMap;
     ros::Subscriber subImuOdometry;//应该是robot_localization的里程计
     ros::Subscriber subLaserOdometry;//scan与subkeyframe匹配后的里程计
 
@@ -41,6 +41,8 @@ public:
     double lidarOdomTime = -1;
     deque<nav_msgs::Odometry> imuOdomQueue;
 
+    tf::Transform map_to_odom;
+    bool odominit = false;
     TransformFusion()
     {
         if(lidarFrame != baselinkFrame)
@@ -56,6 +58,9 @@ public:
             }
         }
 
+        map_to_odom = tf::Transform(tf::createQuaternionFromRPY(0, 0, 0), tf::Vector3(0, 0, 0));
+
+        subPoseOdomToMap = nh.subscribe<geometry_msgs::PoseStamped>("lio_sam/mapping/pose_odomTo_map", 1,&TransformFusion::odomToMapPoseHandler,      this, ros::TransportHints().tcpNoDelay());
         subLaserOdometry = nh.subscribe<nav_msgs::Odometry>("lio_sam/mapping/odometry", 5, &TransformFusion::lidarOdometryHandler, this, ros::TransportHints().tcpNoDelay());
         subImuOdometry   = nh.subscribe<nav_msgs::Odometry>(odomTopic+"_incremental",   2000, &TransformFusion::imuOdometryHandler,   this, ros::TransportHints().tcpNoDelay());
 
@@ -75,6 +80,20 @@ public:
         return pcl::getTransformation(x, y, z, roll, pitch, yaw);
     }
 
+    void odomToMapPoseHandler(const geometry_msgs::PoseStamped::ConstPtr& poseOdomToMapmsg)
+    {
+        tf::Quaternion q_tem;
+        q_tem.setX(poseOdomToMapmsg->pose.orientation.x);
+        q_tem.setY(poseOdomToMapmsg->pose.orientation.y);
+        q_tem.setZ(poseOdomToMapmsg->pose.orientation.z);
+        q_tem.setW(poseOdomToMapmsg->pose.orientation.w);
+        tf::Vector3 p_tem(poseOdomToMapmsg->pose.position.x, poseOdomToMapmsg->pose.position.y, poseOdomToMapmsg->pose.position.z);
+        tf::Transform(q_tem, p_tem);
+
+       map_to_odom = tf::Transform(tf::Quaternion(poseOdomToMapmsg->pose.orientation.x,poseOdomToMapmsg->pose.orientation.y,poseOdomToMapmsg->pose.orientation.z,poseOdomToMapmsg->pose.orientation.w), p_tem);
+        odominit = true;
+    }
+
     void lidarOdometryHandler(const nav_msgs::Odometry::ConstPtr& odomMsg)
     {
         std::lock_guard<std::mutex> lock(mtx);
@@ -88,8 +107,19 @@ public:
     {
         // static tf
         static tf::TransformBroadcaster tfMap2Odom;
-        static tf::Transform map_to_odom = tf::Transform(tf::createQuaternionFromRPY(0, 0, 0), tf::Vector3(0, 0, 0));
-        tfMap2Odom.sendTransform(tf::StampedTransform(map_to_odom, odomMsg->header.stamp, mapFrame, odometryFrame));//odom与map的变换为同一坐标系
+        if(savePCD == false)
+        {
+          if(odominit == true)
+            tfMap2Odom.sendTransform(tf::StampedTransform(map_to_odom, odomMsg->header.stamp, mapFrame, odometryFrame));//odom与map的变换为同一坐标系
+          else
+            return;
+        }
+        else
+        {
+          map_to_odom = tf::Transform(tf::createQuaternionFromRPY(0, 0, 0), tf::Vector3(0, 0, 0));
+          tfMap2Odom.sendTransform(tf::StampedTransform(map_to_odom, odomMsg->header.stamp, mapFrame, odometryFrame));//odom与map的变换为同一坐标系
+        }
+
 
         std::lock_guard<std::mutex> lock(mtx);
 
@@ -205,10 +235,11 @@ public:
 
     IMUPreintegration()
     {
+
         subImu      = nh.subscribe<sensor_msgs::Imu>  (imuTopic,                   2000, &IMUPreintegration::imuHandler,      this, ros::TransportHints().tcpNoDelay());
         subOdometry = nh.subscribe<nav_msgs::Odometry>("lio_sam/mapping/odometry_incremental", 5,    &IMUPreintegration::odometryHandler, this, ros::TransportHints().tcpNoDelay());
 
-        pubImuOdometry = nh.advertise<nav_msgs::Odometry> (odomTopic+"_incremental", 2000);
+        pubImuOdometry = nh.advertise<nav_msgs::Odometry> (odomTopic+"_incremental", 2000);//和imageProjection接口
 
         boost::shared_ptr<gtsam::PreintegrationParams> p = gtsam::PreintegrationParams::MakeSharedU(imuGravity);
         p->accelerometerCovariance  = gtsam::Matrix33::Identity(3,3) * pow(imuAccNoise, 2); // acc white noise in continuous
