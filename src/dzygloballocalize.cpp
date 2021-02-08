@@ -272,7 +272,6 @@ public:
         // extract time stamp
         timeLaserInfoStamp = msgIn->header.stamp;
         timeLaserInfoCur = timeLaserInfoStamp.toSec();
-        std::cout<<"second: "<<timeLaserInfoCur<<std::endl;
         // extract info and feature cloud
         cloudInfo = *msgIn;
         pcl::fromROSMsg(msgIn->cloud_corner,  *laserCloudCornerLast);//这个发过来时在特征提取节点已经降采样过了，为什么后边还要降采样
@@ -304,11 +303,11 @@ public:
 
              return;
          }
-        std::cout<<"====a====="<<std::endl;
+
         std::lock_guard<std::mutex> lock(mtx);
 
         static double timeLastProcessing = -1;
-        std::cout<<"timeLaserInfoCur: "<<timeLaserInfoCur<<" timeLastProcessing: "<<timeLastProcessing<<" mappingProcessInterval: "<<mappingProcessInterval<<std::endl;
+
         if (timeLaserInfoCur - timeLastProcessing >= mappingProcessInterval)//如果两帧点云数据时间间隔大于等于mappingprocessinterval这个参数，按照这个参数调整周期，类似时间同步
         {
             timeLastProcessing = timeLaserInfoCur;
@@ -320,7 +319,7 @@ public:
             downsampleCurrentScan();//对特征提取发过来的特征点云进行降采样
 
             scan2MapOptimization();//scan与subkeyframe匹配，此时代码中的submap构建已经和论文不同了
-std::cout<<"====b====="<<std::endl;
+
             saveKeyFramesAndFactor();//添加因子并完成优化计算
 
             correctPoses();
@@ -1387,7 +1386,10 @@ std::cout<<"====b====="<<std::endl;
             abs(pitch) < surroundingkeyframeAddingAngleThreshold &&
             abs(yaw)   < surroundingkeyframeAddingAngleThreshold &&
             sqrt(x*x + y*y + z*z) < surroundingkeyframeAddingDistThreshold)
-            return false;
+        {
+          return false;
+        }
+
 
         return true;
     }
@@ -1512,6 +1514,8 @@ std::cout<<"====b====="<<std::endl;
 
     void addPointCloudMatchFactor(int keyframeindex, const Eigen::Affine3f& _matchpose)
     {
+        if(keyframeindex == 0)
+          return;
         if (!cloudKeyPoses3D->points.empty())
         {
           noiseModel::Diagonal::shared_ptr priorNoise = noiseModel::Diagonal::Variances((Vector(6) << 1e-2, 1e-2, M_PI*M_PI, 1e8, 1e8, 1e8).finished()); // rad*rad, meter*meter
@@ -1519,7 +1523,7 @@ std::cout<<"====b====="<<std::endl;
           std::cout<<"globalicp: "<<matchpose.x()<<" "<<matchpose.y()<<" "<<matchpose.z()<<std::endl;
           std::cout<<"keyframe: "<<cloudKeyPoses6D->points[keyframeindex].x<<" "<<cloudKeyPoses6D->points[keyframeindex].y<<" "<<cloudKeyPoses6D->points[keyframeindex].z<<std::endl;
 
-//          gtSAMgraph.add(PriorFactor<Pose3>(keyframeindex, matchpose, priorNoise));//当keyframe为空时添加坐标原点
+          gtSAMgraph.add(PriorFactor<Pose3>(keyframeindex, matchpose, priorNoise));//当keyframe为空时添加坐标原点
 //          initialEstimate.insert(keyframeindex, pclPointTogtsamPose3(cloudKeyPoses6D->points[keyframeindex]));
         }
     }
@@ -1539,7 +1543,7 @@ std::cout<<"====b====="<<std::endl;
         addLoopFactor();
 
         // cout << "****************************************************" << endl;
-        // gtSAMgraph.print("GTSAM Graph:\n");
+//         gtSAMgraph.print("GTSAM Graph:\n");
 
         // update iSAM
         isam->update(gtSAMgraph, initialEstimate);
@@ -1582,7 +1586,7 @@ std::cout<<"====b====="<<std::endl;
         thisPose6D.yaw   = latestEstimate.rotation().yaw();
         thisPose6D.time = timeLaserInfoCur;
         cloudKeyPoses6D->push_back(thisPose6D);//插入xyzirpyt关键帧
-std::cout<<"====c====="<<std::endl;
+
         // cout << "****************************************************" << endl;
         // cout << "Pose covariance:" << endl;
         // cout << isam->marginalCovariance(isamCurrentEstimate.size()-1) << endl << endl;
@@ -1771,7 +1775,7 @@ std::cout<<"====c====="<<std::endl;
                 double t_start = ros::Time::now().toSec();
                 ICPscanMatchGlobal();
                 double t_end = ros::Time::now().toSec();
-                //std::cout << "ICP time consuming: " << t_end-t_start;
+                std::cout << "ICP time consuming: " << t_end-t_start<<std::endl;
 
             }
 
@@ -1887,7 +1891,7 @@ std::cout<<"====c====="<<std::endl;
             pose_odomTo_map.pose.orientation.z = q_odomTo_map.z();
             pose_odomTo_map.pose.orientation.w = q_odomTo_map.w();
             std::cout<<"keyframe size: "<<cloudKeyPoses3D->points.size()<<std::endl;
-            std::cout<<"odomTomap: "<<deltax<<" "<<deltay<<" "<<deltaz<<std::endl;
+            std::cout<<"odomTomap: "<<deltax<<" "<<deltay<<" "<<deltaz<<" "<<deltaR<<" "<<deltaP<<" "<<deltaY<<std::endl;
             pubOdomToMapPose.publish(pose_odomTo_map);
 
         }
@@ -1899,18 +1903,26 @@ std::cout<<"====c====="<<std::endl;
     void ICPscanMatchGlobal()
     {
 
+std::cout<<"keyframesize: "<<cloudKeyPoses3D->points.size()<<std::endl;
       if (cloudKeyPoses3D->points.empty() == true)
+      {
+
             return;
+      }
 
         //change-5
         /******************added by gc************************/
 
        mtxWin.lock();
+
        int latestFrameIDGlobalLocalize;
        latestFrameIDGlobalLocalize = cloudKeyPoses3D->size() - 1;
+       std::cout<<"latestFrameIDGlobalLocalize: "<<latestFrameIDGlobalLocalize<<" lastFrameIDGlobalLocalize: "<<lastFrameIDGlobalLocalize<<std::endl;
        if(lastFrameIDGlobalLocalize == latestFrameIDGlobalLocalize)
+       {
+         mtxWin.unlock();
          return;
-
+       }
 
        pcl::PointCloud<PointType>::Ptr latestCloudIn(new pcl::PointCloud<PointType>());
        *latestCloudIn += *cornerCloudKeyFrames[latestFrameIDGlobalLocalize];//在latestFrameIDGlobalLocalize关键帧时的车体坐标系下点云，后边用来与地图进行匹配得到base_link到map的transform
@@ -2044,13 +2056,13 @@ int main(int argc, char** argv)
 
     ROS_INFO("\033[1;32m----> Map Optimization Started.\033[0m");
 
-//    std::thread loopthread(&mapOptimization::loopClosureThread, &MO);//回环检测线程
+    std::thread loopthread(&mapOptimization::loopClosureThread, &MO);//回环检测线程
     std::thread localizeInWorldThread(&mapOptimization::globalLocalizeThread, &MO);
     std::thread visualizeMapThread(&mapOptimization::visualizeGlobalMapThread, &MO);//可视化线程
 
     ros::spin();
 
-//    loopthread.join();
+    loopthread.join();
     localizeInWorldThread.join();
     visualizeMapThread.join();
 

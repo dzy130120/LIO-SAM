@@ -107,14 +107,14 @@ public:
     {
         // static tf
         static tf::TransformBroadcaster tfMap2Odom;
-//        if(savePCD == false)
-//        {
-//          if(odominit == true)
-//            tfMap2Odom.sendTransform(tf::StampedTransform(map_to_odom, odomMsg->header.stamp, mapFrame, odometryFrame));//odom与map的变换为同一坐标系
-//          else
-//            return;
-//        }
-//        else
+        if(savePCD == false)
+        {
+          if(odominit == true)
+            tfMap2Odom.sendTransform(tf::StampedTransform(map_to_odom, odomMsg->header.stamp, mapFrame, odometryFrame));//odom与map的变换为同一坐标系
+          else
+            return;
+        }
+        else
         {
           map_to_odom = tf::Transform(tf::createQuaternionFromRPY(0, 0, 0), tf::Vector3(0, 0, 0));
           tfMap2Odom.sendTransform(tf::StampedTransform(map_to_odom, odomMsg->header.stamp, mapFrame, odometryFrame));//odom与map的变换为同一坐标系

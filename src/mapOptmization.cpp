@@ -233,7 +233,7 @@ public:
         // extract time stamp
         timeLaserInfoStamp = msgIn->header.stamp;
         timeLaserInfoCur = msgIn->header.stamp.toSec();
-        std::cout<<"second: "<<timeLaserInfoCur<<std::endl;
+
         // extract info and feature cloud
         cloudInfo = *msgIn;
         pcl::fromROSMsg(msgIn->cloud_corner,  *laserCloudCornerLast);//这个发过来时在特征提取节点已经降采样过了，为什么后边还要降采样
