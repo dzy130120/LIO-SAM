@@ -2,7 +2,7 @@
 <launch>
 
 <param name="/use_sim_time" value="true" />
-<node pkg="rosbag" type="play" name="player" args="--clock $(env HOME)/bag/big_loop.bag"/>
+<node pkg="rosbag" type="play" name="player" args="--clock $(env HOME)/bag/lio_bag.bag"/>
     <arg name="project" default="lio_sam"/>
     
     <!-- Parameters -->

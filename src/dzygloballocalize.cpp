@@ -177,6 +177,9 @@ public:
     std::vector<pcl::PointCloud<PointType>::Ptr> win_cornerCloudKeyFrames;
     std::vector<pcl::PointCloud<PointType>::Ptr> win_surfCloudKeyFrames;
 
+    Eigen::Affine3f transOdomToMap;
+    int lastFrameIDGlobalLocalize = -1;
+
     mapOptimization()
     {
         ISAM2Params parameters;
@@ -265,11 +268,11 @@ public:
 
     void laserCloudInfoHandler(const lio_sam::cloud_infoConstPtr& msgIn)
     {
-      std::cout<<"====0===="<<std::endl;
+
         // extract time stamp
         timeLaserInfoStamp = msgIn->header.stamp;
-        timeLaserInfoCur = msgIn->header.stamp.toSec();
-
+        timeLaserInfoCur = timeLaserInfoStamp.toSec();
+        std::cout<<"second: "<<timeLaserInfoCur<<std::endl;
         // extract info and feature cloud
         cloudInfo = *msgIn;
         pcl::fromROSMsg(msgIn->cloud_corner,  *laserCloudCornerLast);//这个发过来时在特征提取节点已经降采样过了，为什么后边还要降采样
@@ -301,10 +304,11 @@ public:
 
              return;
          }
-
+        std::cout<<"====a====="<<std::endl;
         std::lock_guard<std::mutex> lock(mtx);
 
         static double timeLastProcessing = -1;
+        std::cout<<"timeLaserInfoCur: "<<timeLaserInfoCur<<" timeLastProcessing: "<<timeLastProcessing<<" mappingProcessInterval: "<<mappingProcessInterval<<std::endl;
         if (timeLaserInfoCur - timeLastProcessing >= mappingProcessInterval)//如果两帧点云数据时间间隔大于等于mappingprocessinterval这个参数，按照这个参数调整周期，类似时间同步
         {
             timeLastProcessing = timeLaserInfoCur;
@@ -316,7 +320,7 @@ public:
             downsampleCurrentScan();//对特征提取发过来的特征点云进行降采样
 
             scan2MapOptimization();//scan与subkeyframe匹配，此时代码中的submap构建已经和论文不同了
-
+std::cout<<"====b====="<<std::endl;
             saveKeyFramesAndFactor();//添加因子并完成优化计算
 
             correctPoses();
@@ -365,6 +369,14 @@ public:
     {
         return gtsam::Pose3(gtsam::Rot3::RzRyRx(double(thisPoint.roll), double(thisPoint.pitch), double(thisPoint.yaw)),
                                   gtsam::Point3(double(thisPoint.x),    double(thisPoint.y),     double(thisPoint.z)));
+    }
+
+    gtsam::Pose3 Affine3fTogtsamPose3(Eigen::Affine3f thisPoint)
+    {
+        float x, y, z, roll, pitch, yaw;
+        pcl::getTranslationAndEulerAngles (thisPoint, x, y, z, roll, pitch, yaw);
+        return gtsam::Pose3(gtsam::Rot3::RzRyRx(double(roll), double(pitch), double(yaw)),
+                                  gtsam::Point3(double(x),    double(y),     double(z)));
     }
 
     gtsam::Pose3 trans2gtsamPose(float transformIn[])
@@ -1498,6 +1510,20 @@ public:
         aLoopIsClosed = true;
     }
 
+    void addPointCloudMatchFactor(int keyframeindex, const Eigen::Affine3f& _matchpose)
+    {
+        if (!cloudKeyPoses3D->points.empty())
+        {
+          noiseModel::Diagonal::shared_ptr priorNoise = noiseModel::Diagonal::Variances((Vector(6) << 1e-2, 1e-2, M_PI*M_PI, 1e8, 1e8, 1e8).finished()); // rad*rad, meter*meter
+          gtsam::Pose3 matchpose = Affine3fTogtsamPose3(_matchpose);
+          std::cout<<"globalicp: "<<matchpose.x()<<" "<<matchpose.y()<<" "<<matchpose.z()<<std::endl;
+          std::cout<<"keyframe: "<<cloudKeyPoses6D->points[keyframeindex].x<<" "<<cloudKeyPoses6D->points[keyframeindex].y<<" "<<cloudKeyPoses6D->points[keyframeindex].z<<std::endl;
+
+//          gtSAMgraph.add(PriorFactor<Pose3>(keyframeindex, matchpose, priorNoise));//当keyframe为空时添加坐标原点
+//          initialEstimate.insert(keyframeindex, pclPointTogtsamPose3(cloudKeyPoses6D->points[keyframeindex]));
+        }
+    }
+
     void saveKeyFramesAndFactor()
     {
         if (saveFrame() == false)
@@ -1556,7 +1582,7 @@ public:
         thisPose6D.yaw   = latestEstimate.rotation().yaw();
         thisPose6D.time = timeLaserInfoCur;
         cloudKeyPoses6D->push_back(thisPose6D);//插入xyzirpyt关键帧
-
+std::cout<<"====c====="<<std::endl;
         // cout << "****************************************************" << endl;
         // cout << "Pose covariance:" << endl;
         // cout << isam->marginalCovariance(isamCurrentEstimate.size()-1) << endl << endl;
@@ -1724,7 +1750,7 @@ public:
 
     void globalLocalizeThread()
     {
-std::cout<<"====1===="<<std::endl;
+//std::cout<<"====1===="<<std::endl;
         //ros::Rate rate(0.2);
         while (ros::ok())
         {
@@ -1786,7 +1812,9 @@ std::cout<<"====1===="<<std::endl;
         ndt.setInputSource(laserCloudIn);
         ndt.setInputTarget(cloudGlobalMapDS);
         pcl::PointCloud<PointType>::Ptr unused_result_0(new pcl::PointCloud<PointType>());
-
+        transformInTheWorld[3] = -1.58323;
+        transformInTheWorld[4] = 0.897287;
+        transformInTheWorld[4] = -0.082182;
         PointTypePose thisPose6DInWorld = trans2PointTypePose(transformInTheWorld);
         Eigen::Affine3f T_thisPose6DInWorld = pclPointToAffine3f(thisPose6DInWorld);
         ndt.align(*unused_result_0, T_thisPose6DInWorld.matrix());
@@ -1820,7 +1848,7 @@ std::cout<<"====1===="<<std::endl;
         transformInTheWorld[5] = z_g;
 
 
-        Eigen::Affine3f transOdomToMap = T_thisPose6DInMap * T_thisPose6DInOdom.inverse();
+        transOdomToMap = T_thisPose6DInMap * T_thisPose6DInOdom.inverse();
         float deltax, deltay, deltaz, deltaR, deltaP, deltaY;
         pcl::getTranslationAndEulerAngles (transOdomToMap, deltax, deltay, deltaz, deltaR, deltaP, deltaY);
 
@@ -1838,8 +1866,7 @@ std::cout<<"====1===="<<std::endl;
 //        publishCloud(&pubLaserCloudInWorld, unused_result, timeLaserInfoStamp, "map");
 //        publishCloud(&pubMapWorld, cloudGlobalMapDS, timeLaserInfoStamp, "map");
 
-//        if (icp.hasConverged() == false || icp.getFitnessScore() > historyKeyframeFitnessScore)
-        if (false)
+        if (icp.hasConverged() == false || icp.getFitnessScore() > historyKeyframeFitnessScore)
         {
             initializedFlag = Initializing;
             std::cout << "Initializing Fail" << std::endl;
@@ -1860,6 +1887,7 @@ std::cout<<"====1===="<<std::endl;
             pose_odomTo_map.pose.orientation.z = q_odomTo_map.z();
             pose_odomTo_map.pose.orientation.w = q_odomTo_map.w();
             std::cout<<"keyframe size: "<<cloudKeyPoses3D->points.size()<<std::endl;
+            std::cout<<"odomTomap: "<<deltax<<" "<<deltay<<" "<<deltaz<<std::endl;
             pubOdomToMapPose.publish(pose_odomTo_map);
 
         }
@@ -1877,32 +1905,38 @@ std::cout<<"====1===="<<std::endl;
         //change-5
         /******************added by gc************************/
 
-            mtxWin.lock();
-            int latestFrameIDGlobalLocalize;
-            latestFrameIDGlobalLocalize = win_cloudKeyPoses3D.size() - 1;
-
-            pcl::PointCloud<PointType>::Ptr latestCloudIn(new pcl::PointCloud<PointType>());
-            *latestCloudIn += *transformPointCloud(win_cornerCloudKeyFrames[latestFrameIDGlobalLocalize], &win_cloudKeyPoses6D[latestFrameIDGlobalLocalize]);
-            *latestCloudIn += *transformPointCloud(win_surfCloudKeyFrames[latestFrameIDGlobalLocalize],   &win_cloudKeyPoses6D[latestFrameIDGlobalLocalize]);
-            std::cout << "the size of input cloud: " << latestCloudIn->points.size() <<std::endl;
-
-            mtxWin.unlock();
-
-        pcl::NormalDistributionsTransform<PointType, PointType> ndt;
-        ndt.setTransformationEpsilon(0.01);
-        ndt.setResolution(1.0);
+       mtxWin.lock();
+       int latestFrameIDGlobalLocalize;
+       latestFrameIDGlobalLocalize = cloudKeyPoses3D->size() - 1;
+       if(lastFrameIDGlobalLocalize == latestFrameIDGlobalLocalize)
+         return;
 
 
-        pcl::IterativeClosestPoint<PointType, PointType> icp;
-        icp.setMaxCorrespondenceDistance(100);
-        icp.setMaximumIterations(100);
-        icp.setTransformationEpsilon(1e-6);
-        icp.setEuclideanFitnessEpsilon(1e-6);
-        icp.setRANSACIterations(0);
+       pcl::PointCloud<PointType>::Ptr latestCloudIn(new pcl::PointCloud<PointType>());
+       *latestCloudIn += *cornerCloudKeyFrames[latestFrameIDGlobalLocalize];//在latestFrameIDGlobalLocalize关键帧时的车体坐标系下点云，后边用来与地图进行匹配得到base_link到map的transform
+       *latestCloudIn += *surfCloudKeyFrames[latestFrameIDGlobalLocalize];
+       std::cout << "the size of input cloud: " << latestCloudIn->points.size() <<std::endl;
 
-        mtxtranformOdomToWorld.lock();
-        Eigen::Affine3f transodomToWorld_init = pcl::getTransformation(tranformOdomToWorld[3], tranformOdomToWorld[4],tranformOdomToWorld[5],tranformOdomToWorld[0],tranformOdomToWorld[1],tranformOdomToWorld[2]);
-        mtxtranformOdomToWorld.unlock();
+       mtxWin.unlock();
+
+       pcl::NormalDistributionsTransform<PointType, PointType> ndt;
+       ndt.setTransformationEpsilon(0.01);
+       ndt.setResolution(1.0);
+
+
+       pcl::IterativeClosestPoint<PointType, PointType> icp;
+       icp.setMaxCorrespondenceDistance(100);
+       icp.setMaximumIterations(100);
+       icp.setTransformationEpsilon(1e-6);
+       icp.setEuclideanFitnessEpsilon(1e-6);
+       icp.setRANSACIterations(0);
+
+       mtxtranformOdomToWorld.lock();
+       Eigen::Affine3f tranformOdomToWorld_delta = pcl::getTransformation(tranformOdomToWorld[3], tranformOdomToWorld[4], tranformOdomToWorld[5],
+                                                           tranformOdomToWorld[0], tranformOdomToWorld[1], tranformOdomToWorld[2]);
+       Eigen::Affine3f transodomToWorld_init = tranformOdomToWorld_delta * pclPointToAffine3f(cloudKeyPoses6D->points[latestFrameIDGlobalLocalize]);
+//       Eigen::Affine3f transodomToWorld_init = pcl::getTransformation(tranformOdomToWorld[3], tranformOdomToWorld[4],tranformOdomToWorld[5],tranformOdomToWorld[0],tranformOdomToWorld[1],tranformOdomToWorld[2]);
+       mtxtranformOdomToWorld.unlock();
 
         Eigen::Matrix4f matricInitGuess = transodomToWorld_init.matrix();
       //std::cout << "matricInitGuess: " << matricInitGuess << std::endl;
@@ -1929,15 +1963,15 @@ std::cout<<"====1===="<<std::endl;
         pcl::getTranslationAndEulerAngles (transodomToWorld_New, x, y, z, roll, pitch, yaw);
         //std::cout << " in test 0.03: deltaX = " << x << " deltay = " << y << " deltaZ = " << z << std::endl;
 
-        mtxtranformOdomToWorld.lock();
-        //renew tranformOdomToWorld
-        tranformOdomToWorld[0] = roll;
-        tranformOdomToWorld[1] = pitch;
-        tranformOdomToWorld[2] = yaw;
-        tranformOdomToWorld[3] = x;
-        tranformOdomToWorld[4] = y;
-        tranformOdomToWorld[5] = z;
-        mtxtranformOdomToWorld.unlock();
+//        mtxtranformOdomToWorld.lock();
+//        //renew tranformOdomToWorld
+//        tranformOdomToWorld[0] = roll;
+//        tranformOdomToWorld[1] = pitch;
+//        tranformOdomToWorld[2] = yaw;
+//        tranformOdomToWorld[3] = x;
+//        tranformOdomToWorld[4] = y;
+//        tranformOdomToWorld[5] = z;
+//        mtxtranformOdomToWorld.unlock();
         //publish the laserpointcloud in world frame
 
         //publish global map
@@ -1945,17 +1979,19 @@ std::cout<<"====1===="<<std::endl;
 
         if (icp.hasConverged() == true && icp.getFitnessScore() < historyKeyframeFitnessScore)
         {
-            geometry_msgs::PoseStamped pose_odomTo_map;
-            tf::Quaternion q_odomTo_map = tf::createQuaternionFromRPY(roll, pitch, yaw);
+//            geometry_msgs::PoseStamped pose_odomTo_map;
+//            tf::Quaternion q_odomTo_map = tf::createQuaternionFromRPY(roll, pitch, yaw);
 
-            pose_odomTo_map.header.stamp = timeLaserInfoStamp;
-            pose_odomTo_map.header.frame_id = "map";
-            pose_odomTo_map.pose.position.x = x; pose_odomTo_map.pose.position.y = y; pose_odomTo_map.pose.position.z = z;
-            pose_odomTo_map.pose.orientation.x = q_odomTo_map.x();
-            pose_odomTo_map.pose.orientation.y = q_odomTo_map.y();
-            pose_odomTo_map.pose.orientation.z = q_odomTo_map.z();
-            pose_odomTo_map.pose.orientation.w = q_odomTo_map.w();
+//            pose_odomTo_map.header.stamp = timeLaserInfoStamp;
+//            pose_odomTo_map.header.frame_id = "map";
+//            pose_odomTo_map.pose.position.x = x; pose_odomTo_map.pose.position.y = y; pose_odomTo_map.pose.position.z = z;
+//            pose_odomTo_map.pose.orientation.x = q_odomTo_map.x();
+//            pose_odomTo_map.pose.orientation.y = q_odomTo_map.y();
+//            pose_odomTo_map.pose.orientation.z = q_odomTo_map.z();
+//            pose_odomTo_map.pose.orientation.w = q_odomTo_map.w();
 //            pubOdomToMapPose.publish(pose_odomTo_map);
+          addPointCloudMatchFactor(latestFrameIDGlobalLocalize, transOdomToMap.inverse() * transodomToWorld_New);
+          lastFrameIDGlobalLocalize = latestFrameIDGlobalLocalize;
         }
 
 
