@@ -1972,12 +1972,12 @@ public:
     void ICPscanMatchGlobal()
     {
 
-std::cout<<"keyframesize: "<<cloudKeyPoses3D->points.size()<<std::endl;
-      if (cloudKeyPoses3D->points.empty() == true)
-      {
+        std::cout<<"keyframesize: "<<cloudKeyPoses3D->points.size()<<std::endl;
+        if (cloudKeyPoses3D->points.empty() == true)
+        {
 
-            return;
-      }
+              return;
+        }
 
         //change-5
         /******************added by gc************************/
@@ -1996,7 +1996,29 @@ std::cout<<"keyframesize: "<<cloudKeyPoses3D->points.size()<<std::endl;
        pcl::PointCloud<PointType>::Ptr latestCloudIn(new pcl::PointCloud<PointType>());
        *latestCloudIn += *cornerCloudKeyFrames[latestFrameIDGlobalLocalize];//在latestFrameIDGlobalLocalize关键帧时的车体坐标系下点云，后边用来与地图进行匹配得到base_link到map的transform
        *latestCloudIn += *surfCloudKeyFrames[latestFrameIDGlobalLocalize];
-       std::cout << "the size of input cloud: " << latestCloudIn->points.size() <<std::endl;
+       gtsam::Pose3 current = pclPointTogtsamPose3(cloudKeyPoses6D->points[latestFrameIDGlobalLocalize]);
+       current = current.inverse();
+       if(lastFrameIDGlobalLocalize!=-1)
+       {
+         for(int start = lastFrameIDGlobalLocalize; start<latestFrameIDGlobalLocalize; start++)
+         {
+           gtsam::Pose3 startpose = pclPointTogtsamPose3(cloudKeyPoses6D->points[start]);
+           gtsam::Pose3 relative = current * startpose;
+           PointTypePose relativePose6D;
+           relativePose6D.x = relative.x();
+           relativePose6D.y = relative.y();
+           relativePose6D.z = relative.z();
+           relativePose6D.roll  = relative.rotation().roll();
+           relativePose6D.pitch = relative.rotation().pitch();
+           relativePose6D.yaw   = relative.rotation().yaw();
+           *latestCloudIn += *transformPointCloud(cornerCloudKeyFrames[start], &relativePose6D);
+           *latestCloudIn += *transformPointCloud(surfCloudKeyFrames[start],   &relativePose6D);
+         }
+         std::cout << "the size of input cloud before downsample: " << latestCloudIn->points.size() <<std::endl;
+         downSizeFilterSurf.setInputCloud(latestCloudIn);
+         downSizeFilterSurf.filter(*latestCloudIn);
+       }
+       std::cout << "the size of input cloud after downsample: " << latestCloudIn->points.size() <<std::endl;
 
        mtxWin.unlock();
 
