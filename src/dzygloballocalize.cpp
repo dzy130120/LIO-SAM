@@ -1845,18 +1845,13 @@ public:
             }
             else
             {
-                ros::Duration(1.5).sleep();
+                ros::Duration(5).sleep();
                 double t_start = ros::Time::now().toSec();
                 ICPscanMatchGlobal();
                 double t_end = ros::Time::now().toSec();
                 std::cout << "ICP time consuming: " << t_end-t_start<<std::endl;
 
             }
-
-
-
-            //rate.sleep();
-            //}
         }
     }
 
