@@ -15,6 +15,7 @@
 #include <gtsam/inference/Symbol.h>
 
 #include <gtsam/nonlinear/ISAM2.h>
+#include <fstream>
 
 using namespace gtsam;
 //15维优化变量
@@ -45,6 +46,42 @@ POINT_CLOUD_REGISTER_POINT_STRUCT (PointXYZIRPYT,
                                    (double, time, time))
 
 typedef PointXYZIRPYT  PointTypePose;
+
+class MatchFactor:public gtsam::NoiseModelFactor1<Pose3>
+{
+private:
+        Pose3 _mx;
+public:
+        MatchFactor(Key j, Pose3 x, const SharedNoiseModel& model):
+                        NoiseModelFactor1<Pose3>(model, j), _mx(x) {}
+        virtual ~MatchFactor() {}
+        Vector evaluateError(const Pose3& q, boost::optional<Matrix&> H = boost::none) const
+        {
+
+              Pose3 error = _mx * q.inverse();
+              double ex = error.translation().x();
+              double ey = error.translation().y();
+              double ez = error.translation().z();
+              double er = (error.rotation().roll());
+              double ep = (error.rotation().pitch());
+              double ew = (error.rotation().yaw());
+
+              if (H) (*H) = (Matrix(6,6) <<0,0,0,0,0,0,
+                                           0,0,0,0,0,0,
+                                           0,0,1,0,0,0,
+                                           0,0,0,1,0,0,
+                                           0,0,0,0,1,0,
+                                           0,0,0,0,0,1).finished();
+
+
+              return (Vector(6) << ex, ey, ez, er, ep, ew).finished();
+        }
+        virtual gtsam::NonlinearFactor::shared_ptr clone() const
+        {
+                return boost::static_pointer_cast<gtsam::NonlinearFactor>(
+                        gtsam::NonlinearFactor::shared_ptr(new MatchFactor(*this)));
+        }
+};
 
 
 class mapOptimization : public ParamServer
@@ -1518,12 +1555,12 @@ public:
           return;
         if (!cloudKeyPoses3D->points.empty())
         {
-          noiseModel::Diagonal::shared_ptr priorNoise = noiseModel::Diagonal::Variances((Vector(6) << 1e-2, 1e-2, M_PI*M_PI, 1e8, 1e8, 1e8).finished()); // rad*rad, meter*meter
+          noiseModel::Diagonal::shared_ptr matchNoise = noiseModel::Diagonal::Variances((Vector(6) << 1e-2, 1e-2, M_PI*M_PI, 1e8, 1e8, 1e8).finished()); // rad*rad, meter*meter
           gtsam::Pose3 matchpose = Affine3fTogtsamPose3(_matchpose);
           std::cout<<"globalicp: "<<matchpose.x()<<" "<<matchpose.y()<<" "<<matchpose.z()<<std::endl;
           std::cout<<"keyframe: "<<cloudKeyPoses6D->points[keyframeindex].x<<" "<<cloudKeyPoses6D->points[keyframeindex].y<<" "<<cloudKeyPoses6D->points[keyframeindex].z<<std::endl;
 
-          gtSAMgraph.add(PriorFactor<Pose3>(keyframeindex, matchpose, priorNoise));//当keyframe为空时添加坐标原点
+          gtSAMgraph.add(MatchFactor(keyframeindex, matchpose, matchNoise));//当keyframe为空时添加坐标原点
 //          initialEstimate.insert(keyframeindex, pclPointTogtsamPose3(cloudKeyPoses6D->points[keyframeindex]));
         }
     }
