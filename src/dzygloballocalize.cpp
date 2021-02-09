@@ -217,6 +217,8 @@ public:
     Eigen::Affine3f transOdomToMap;
     int lastFrameIDGlobalLocalize = -1;
 
+    vector<int> addmatchfactor;
+
     mapOptimization()
     {
         ISAM2Params parameters;
@@ -1568,6 +1570,7 @@ public:
           std::cout<<"keyframe: "<<cloudKeyPoses6D->points[keyframeindex].x<<" "<<cloudKeyPoses6D->points[keyframeindex].y<<" "<<cloudKeyPoses6D->points[keyframeindex].z<<std::endl;
 
           gtSAMgraph.add(PriorFactor<Pose3>(keyframeindex, matchpose, matchNoise));//当keyframe为空时添加坐标原点
+          addmatchfactor.emplace_back(keyframeindex);
 //          initialEstimate.insert(keyframeindex, pclPointTogtsamPose3(cloudKeyPoses6D->points[keyframeindex]));
         }
     }
@@ -1611,6 +1614,7 @@ public:
         Pose3 latestEstimate;
 
         isamCurrentEstimate = isam->calculateEstimate();//优化后结果
+        std::cout<<"isamsize: "<<isamCurrentEstimate.size()<<" keyframesize: "<<cloudKeyPoses6D->size()<<endl;
         latestEstimate = isamCurrentEstimate.at<Pose3>(isamCurrentEstimate.size()-1);//优化后最新时刻的位姿
         // cout << "****************************************************" << endl;
         // isamCurrentEstimate.print("Current estimate: ");
@@ -1688,7 +1692,33 @@ public:
             }
 
             aLoopIsClosed = false;
+            addmatchfactor.clear();
         }
+        else
+        {
+          if(addmatchfactor.size()!=0)
+          {
+            for(auto i:addmatchfactor)
+            {
+              Pose3 latestEstimate = isamCurrentEstimate.at<Pose3>(i);//优化后最新时刻的位姿
+              std::cout<<"ori x: "<<cloudKeyPoses3D->points[i].x<<" y: "<<cloudKeyPoses3D->points[i].y<<" z: "<<cloudKeyPoses3D->points[i].z<<std::endl;
+              std::cout<<"opt x: "<<latestEstimate.translation().x()<<" y: "<<latestEstimate.translation().y()<<" z: "<<latestEstimate.translation().z()<<std::endl;
+              cloudKeyPoses6D->points[i].x = latestEstimate.translation().x();
+              cloudKeyPoses6D->points[i].y = latestEstimate.translation().y();
+              cloudKeyPoses6D->points[i].z = latestEstimate.translation().z();
+              cloudKeyPoses6D->points[i].roll = latestEstimate.rotation().roll();
+              cloudKeyPoses6D->points[i].pitch = latestEstimate.rotation().pitch();
+              cloudKeyPoses6D->points[i].yaw = latestEstimate.rotation().yaw();
+
+              cloudKeyPoses3D->points[i].x = latestEstimate.translation().x();
+              cloudKeyPoses3D->points[i].y = latestEstimate.translation().y();
+              cloudKeyPoses3D->points[i].z = latestEstimate.translation().z();
+            }
+            addmatchfactor.clear();
+
+          }
+        }
+
     }
 
     void updatePath(const PointTypePose& pose_in)
