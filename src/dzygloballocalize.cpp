@@ -1555,12 +1555,19 @@ public:
           return;
         if (!cloudKeyPoses3D->points.empty())
         {
-          noiseModel::Diagonal::shared_ptr matchNoise = noiseModel::Diagonal::Variances((Vector(6) << 1e-2, 1e-2, M_PI*M_PI, 1e8, 1e8, 1e8).finished()); // rad*rad, meter*meter
           gtsam::Pose3 matchpose = Affine3fTogtsamPose3(_matchpose);
+//          noiseModel::Diagonal::shared_ptr matchNoise = noiseModel::Diagonal::Variances((Vector(6) << 1e-2, 1e-2, M_PI*M_PI, 1e8, 1e8, 1e8).finished()); // rad*rad, meter*meter
+          noiseModel::Diagonal::shared_ptr matchNoise = noiseModel::Diagonal::Variances((Vector(6) << std::pow(matchpose.rotation().roll()-cloudKeyPoses6D->points[keyframeindex].roll,2),
+                                                                                                      std::pow(matchpose.rotation().pitch()-cloudKeyPoses6D->points[keyframeindex].pitch,2),
+                                                                                                      std::pow(matchpose.rotation().yaw()-cloudKeyPoses6D->points[keyframeindex].yaw,2),
+                                                                                                      std::pow(matchpose.x()-cloudKeyPoses6D->points[keyframeindex].x,2),
+                                                                                                      std::pow(matchpose.y()-cloudKeyPoses6D->points[keyframeindex].y,2),
+                                                                                                      std::pow(matchpose.z()-cloudKeyPoses6D->points[keyframeindex].y,2)).finished()); // rad*rad, meter*meter
+
           std::cout<<"globalicp: "<<matchpose.x()<<" "<<matchpose.y()<<" "<<matchpose.z()<<std::endl;
           std::cout<<"keyframe: "<<cloudKeyPoses6D->points[keyframeindex].x<<" "<<cloudKeyPoses6D->points[keyframeindex].y<<" "<<cloudKeyPoses6D->points[keyframeindex].z<<std::endl;
 
-          gtSAMgraph.add(MatchFactor(keyframeindex, matchpose, matchNoise));//当keyframe为空时添加坐标原点
+          gtSAMgraph.add(PriorFactor<Pose3>(keyframeindex, matchpose, matchNoise));//当keyframe为空时添加坐标原点
 //          initialEstimate.insert(keyframeindex, pclPointTogtsamPose3(cloudKeyPoses6D->points[keyframeindex]));
         }
     }
@@ -1808,7 +1815,7 @@ public:
             }
             else
             {
-                ros::Duration(10.0).sleep();
+                ros::Duration(1.5).sleep();
                 double t_start = ros::Time::now().toSec();
                 ICPscanMatchGlobal();
                 double t_end = ros::Time::now().toSec();
