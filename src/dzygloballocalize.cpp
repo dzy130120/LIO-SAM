@@ -1885,9 +1885,10 @@ public:
         ndt.setInputSource(laserCloudIn);
         ndt.setInputTarget(cloudGlobalMapDS);
         pcl::PointCloud<PointType>::Ptr unused_result_0(new pcl::PointCloud<PointType>());
-        transformInTheWorld[3] = -1.58323;
-        transformInTheWorld[4] = 0.897287;
-        transformInTheWorld[4] = -0.082182;
+        //点云匹配初始位置
+//        transformInTheWorld[3] = -1.58323;
+//        transformInTheWorld[4] = 0.897287;
+//        transformInTheWorld[4] = -0.082182;
         PointTypePose thisPose6DInWorld = trans2PointTypePose(transformInTheWorld);
         Eigen::Affine3f T_thisPose6DInWorld = pclPointToAffine3f(thisPose6DInWorld);
         ndt.align(*unused_result_0, T_thisPose6DInWorld.matrix());
