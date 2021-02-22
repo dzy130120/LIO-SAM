@@ -104,3 +104,56 @@ add_executable(${PROJECT_NAME}_dzyglobalLocalize src/dzygloballocalize.cpp)
 add_dependencies(${PROJECT_NAME}_dzyglobalLocalize ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
 target_compile_options(${PROJECT_NAME}_dzyglobalLocalize PRIVATE ${OpenMP_CXX_FLAGS})
 target_link_libraries(${PROJECT_NAME}_dzyglobalLocalize ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBRARIES} ${OpenMP_CXX_FLAGS} gtsam)
+
+## Mark executables and/or libraries for installation
+ install(TARGETS ${PROJECT_NAME}_imageProjection ${PROJECT_NAME}_featureExtraction ${PROJECT_NAME}_mapOptmization ${PROJECT_NAME}_imuPreintegration ${PROJECT_NAME}_globalLocalize ${PROJECT_NAME}_dzyglobalLocalize
+   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+ )
+
+## Copy launch files
+ install(DIRECTORY launch/
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
+  FILES_MATCHING PATTERN "*.launch"
+)
+
+## Copy yaml files
+ install(DIRECTORY config/
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/config
+  FILES_MATCHING PATTERN "*.yaml"
+)
+
+
+## Mark other files for installation (e.g. launch and bag files, etc.)
+# install(FILES
+#   # myfile1
+#   # myfile2
+#   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+# )
+#############
+## Packing ##
+#############
+
+execute_process(
+        COMMAND git rev-parse --verify --short HEAD
+        WORKING_DIRECTORY .
+        OUTPUT_VARIABLE GIT_SHORT_HASH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+string(REPLACE "_"
+        "-" PACK_PROJECT_NAME
+        ${PROJECT_NAME})
+
+message(${PACK_PROJECT_NAME})
+
+string(TIMESTAMP TIME "%Y%m%d")
+set(CPACK_PACKAGING_INSTALL_PREFIX "/opt/raccoon")
+set(CPACK_GENERATOR "DEB")
+set(CPACK_PACKAGE_CONTACT $ENV{PACKAGE_CONTACT})
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER $ENV{PACKAGE_MAINTAINER})
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY $ENV{PACKAGE_DESCRIPTION})
+set(CPACK_PACKAGE_NAME "ros-kinetic-raccoon-${PACK_PROJECT_NAME}")
+set(CPACK_PACKAGE_VERSION $ENV{PACKAGE_VERSION}-${TIME}-${GIT_SHORT_HASH})
+set(CPACK_SYSTEM_NAME linux)
+include(CPack)
