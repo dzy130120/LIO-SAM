@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <launch>
 
-<param name="/use_sim_time" value="true" />
-<node pkg="rosbag" type="play" name="player" args="--clock $(env HOME)/bag/lio_bag.bag"/>
+<!--<param name="/use_sim_time" value="true" />-->
+<!--<node pkg="rosbag" type="play" name="player" args="clock $(env HOME)/outter_small.bag"/>-->
     <arg name="project" default="lio_sam"/>
     
     <!-- Parameters -->

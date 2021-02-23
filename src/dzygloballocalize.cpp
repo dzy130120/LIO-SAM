@@ -16,6 +16,7 @@
 
 #include <gtsam/nonlinear/ISAM2.h>
 #include <fstream>
+#include <geometry_msgs/PoseWithCovarianceStamped.h>
 
 using namespace gtsam;
 //15维优化变量
@@ -115,7 +116,7 @@ public:
     ros::Subscriber subCloud;//订阅imageproject发来的矫正后的点云
     ros::Subscriber subGPS;//订阅GPS
     ros::Subscriber subLoop;//这个订阅回环是什么鬼，好像没人调用这个接口
-
+    ros::Subscriber subIniPoseFromRviz;
     std::deque<nav_msgs::Odometry> gpsQueue;
     lio_sam::cloud_info cloudInfo;
 
@@ -245,6 +246,8 @@ public:
         pubCloudRegisteredRaw = nh.advertise<sensor_msgs::PointCloud2>("lio_sam/mapping/cloud_registered_raw", 1);
 
         pubOdomToMapPose = nh.advertise<geometry_msgs::PoseStamped>("lio_sam/mapping/pose_odomTo_map", 1);
+
+        subIniPoseFromRviz = nh.subscribe("/initialpose", 8, &mapOptimization::initialpose_callback, this);
 
         downSizeFilterCorner.setLeafSize(mappingCornerLeafSize, mappingCornerLeafSize, mappingCornerLeafSize);
         downSizeFilterSurf.setLeafSize(mappingSurfLeafSize, mappingSurfLeafSize, mappingSurfLeafSize);
@@ -1820,7 +1823,9 @@ public:
         downSizeFilterICP.setInputCloud(cloudGlobalMap);
         downSizeFilterICP.filter(*cloud_temp);
         //*cloudGlobalMap = *cloud_temp;
-        *cloudGlobalMapDS = *cloud_temp;
+        std::vector<int> mapping;
+        pcl::removeNaNFromPointCloud(*cloud_temp, *cloudGlobalMapDS, mapping);
+//        *cloudGlobalMapDS = *cloud_temp;
 
         std::cout << "test 0.01  the size of global cloud: " << cloudGlobalMap->points.size() << std::endl;
         std::cout << "test 0.02  the size of global map after filter: " << cloudGlobalMapDS->points.size() << std::endl;
@@ -1828,7 +1833,6 @@ public:
 
     void globalLocalizeThread()
     {
-//std::cout<<"====1===="<<std::endl;
         //ros::Rate rate(0.2);
         while (ros::ok())
         {
@@ -1855,12 +1859,54 @@ public:
         }
     }
 
+    void initialpose_callback(const geometry_msgs::PoseWithCovarianceStampedConstPtr& pose_msg)
+    {
+        //first calculate global pose
+        //x-y-z
+//        if(initializedFlag == Initialized)
+//            return;
+
+        float x = pose_msg->pose.pose.position.x;
+        float y = pose_msg->pose.pose.position.y;
+        float z = pose_msg->pose.pose.position.z;
+
+        //roll-pitch-yaw
+        tf::Quaternion q_global;
+        double roll_global; double pitch_global; double yaw_global;
+
+        q_global.setX(pose_msg->pose.pose.orientation.x);
+        q_global.setY(pose_msg->pose.pose.orientation.y);
+        q_global.setZ(pose_msg->pose.pose.orientation.z);
+        q_global.setW(pose_msg->pose.pose.orientation.w);
+
+        tf::Matrix3x3(q_global).getRPY(roll_global, pitch_global, yaw_global);
+        //global transformation
+//        transformInTheWorld[0] = roll_global;
+//        transformInTheWorld[1] = pitch_global;
+        transformInTheWorld[0] = 0;
+        transformInTheWorld[1] = 0;
+        transformInTheWorld[2] = yaw_global;
+        transformInTheWorld[3] = x;
+        transformInTheWorld[4] = y;
+//        transformInTheWorld[5] = z;
+        transformInTheWorld[5] = 0;
+
+
+        mtxtranformOdomToWorld.unlock();
+        initializedFlag = NonInitialized;
+
+        //globalLocalizeInitialiized = false;
+
+    }
+
     void ICPLocalizeInitialize()
     {
         pcl::PointCloud<PointType>::Ptr laserCloudIn(new pcl::PointCloud<PointType>());
 
         mtx_general.lock();
         *laserCloudIn += *cloudScanForInitialize;
+        std::vector<int> mapping;
+        pcl::removeNaNFromPointCloud(*laserCloudIn, *laserCloudIn, mapping);
         mtx_general.unlock();
 
         //publishCloud(&fortest_publasercloudINWorld, laserCloudIn, timeLaserInfoStamp, "map");
@@ -2018,6 +2064,8 @@ public:
          std::cout << "the size of input cloud before downsample: " << latestCloudIn->points.size() <<std::endl;
          downSizeFilterSurf.setInputCloud(latestCloudIn);
          downSizeFilterSurf.filter(*latestCloudIn);
+         std::vector<int> mapping;
+         pcl::removeNaNFromPointCloud(*latestCloudIn, *latestCloudIn, mapping);
        }
        std::cout << "the size of input cloud after downsample: " << latestCloudIn->points.size() <<std::endl;
 
