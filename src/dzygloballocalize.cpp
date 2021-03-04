@@ -17,6 +17,7 @@
 #include <gtsam/nonlinear/ISAM2.h>
 #include <fstream>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
+#include <tf_conversions/tf_eigen.h>
 
 using namespace gtsam;
 //15维优化变量
@@ -97,6 +98,11 @@ public:
     ISAM2 *isam;
     Values isamCurrentEstimate;
     Eigen::MatrixXd poseCovariance;
+
+    tf::TransformListener tfListener;
+    tf::StampedTransform lidar2Baselink;
+    Eigen::Affine3d lidar2Baselink_;
+    PointTypePose lidar2Baselink_p;
 
     ros::Publisher pubLaserCloudSurround;
     ros::Publisher pubLaserOdometryGlobal;
@@ -226,6 +232,27 @@ public:
         parameters.relinearizeThreshold = 0.1;
         parameters.relinearizeSkip = 1;
         isam = new ISAM2(parameters);
+
+        try
+        {
+            tfListener.waitForTransform(lidarFrame, baselinkFrame, ros::Time(0), ros::Duration(3.0));
+            tfListener.lookupTransform(lidarFrame, baselinkFrame, ros::Time(0), lidar2Baselink);
+            tf::Transform t(lidar2Baselink.getRotation(), lidar2Baselink.getOrigin());
+            tf::transformTFToEigen(t, lidar2Baselink_);
+            double x, y, z, roll, pitch, yaw;
+            pcl::getTranslationAndEulerAngles (lidar2Baselink_, x, y, z, roll, pitch, yaw);
+            lidar2Baselink_p.x = x;
+            lidar2Baselink_p.y = y;
+            lidar2Baselink_p.z = z;
+            lidar2Baselink_p.roll = roll;
+            lidar2Baselink_p.pitch = pitch;
+            lidar2Baselink_p.yaw = yaw;
+            std::cout<<"matrix: "<<std::endl<<static_cast<Eigen::Affine3f>( lidar2Baselink_.inverse()).matrix()<<std::endl;
+        }
+        catch (tf::TransformException ex)
+        {
+            ROS_ERROR("%s",ex.what());
+        }
 
         pubKeyPoses                 = nh.advertise<sensor_msgs::PointCloud2>("lio_sam/mapping/trajectory", 1);
         pubLaserCloudSurround       = nh.advertise<sensor_msgs::PointCloud2>("lio_sam/mapping/map_global", 1);
@@ -993,11 +1020,13 @@ public:
         laserCloudCornerLastDS->clear();
         downSizeFilterCorner.setInputCloud(laserCloudCornerLast);
         downSizeFilterCorner.filter(*laserCloudCornerLastDS);
+//        laserCloudCornerLastDS = transformPointCloud(laserCloudCornerLastDS, &lidar2Baselink_p);
         laserCloudCornerLastDSNum = laserCloudCornerLastDS->size();
 
         laserCloudSurfLastDS->clear();
         downSizeFilterSurf.setInputCloud(laserCloudSurfLast);
         downSizeFilterSurf.filter(*laserCloudSurfLastDS);
+//        laserCloudSurfLastDS = transformPointCloud(laserCloudSurfLastDS, &lidar2Baselink_p);
         laserCloudSurfLastDSNum = laserCloudSurfLastDS->size();
     }
 
@@ -1968,7 +1997,8 @@ public:
         transformInTheWorld[5] = z_g;
 
 
-        transOdomToMap = T_thisPose6DInMap * T_thisPose6DInOdom.inverse();
+
+        transOdomToMap = T_thisPose6DInMap  * T_thisPose6DInOdom.inverse();
         float deltax, deltay, deltaz, deltaR, deltaP, deltaY;
         pcl::getTranslationAndEulerAngles (transOdomToMap, deltax, deltay, deltaz, deltaR, deltaP, deltaY);
 
@@ -2142,7 +2172,7 @@ public:
 //            pose_odomTo_map.pose.orientation.z = q_odomTo_map.z();
 //            pose_odomTo_map.pose.orientation.w = q_odomTo_map.w();
 //            pubOdomToMapPose.publish(pose_odomTo_map);
-          addPointCloudMatchFactor(latestFrameIDGlobalLocalize, transOdomToMap.inverse() * transodomToWorld_New);
+          addPointCloudMatchFactor(latestFrameIDGlobalLocalize, transOdomToMap.inverse() * transodomToWorld_New );
           lastFrameIDGlobalLocalize = latestFrameIDGlobalLocalize;
         }
 
