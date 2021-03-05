@@ -15,7 +15,7 @@
 #include <gtsam/inference/Symbol.h>
 
 #include <gtsam/nonlinear/ISAM2.h>
-
+#include <tf_conversions/tf_eigen.h>
 using namespace gtsam;
 //15维优化变量
 using symbol_shorthand::X; // Pose3 (x,y,z,r,p,y)
@@ -59,6 +59,11 @@ public:
     ISAM2 *isam;
     Values isamCurrentEstimate;
     Eigen::MatrixXd poseCovariance;
+
+    tf::TransformListener tfListener;
+    tf::StampedTransform lidar2Baselink;
+    Eigen::Affine3d lidar2Baselink_;
+    PointTypePose lidar2Baselink_p;
 
     ros::Publisher pubLaserCloudSurround;
     ros::Publisher pubLaserOdometryGlobal;
@@ -156,6 +161,27 @@ public:
         parameters.relinearizeThreshold = 0.1;
         parameters.relinearizeSkip = 1;
         isam = new ISAM2(parameters);
+
+        try
+        {
+            tfListener.waitForTransform(baselinkFrame, lidarFrame, ros::Time(0), ros::Duration(3.0));
+            tfListener.lookupTransform(baselinkFrame, lidarFrame, ros::Time(0), lidar2Baselink);
+            tf::Transform t(lidar2Baselink.getRotation(), lidar2Baselink.getOrigin());
+            tf::transformTFToEigen(t, lidar2Baselink_);
+            double x, y, z, roll, pitch, yaw;
+            pcl::getTranslationAndEulerAngles (lidar2Baselink_, x, y, z, roll, pitch, yaw);
+            lidar2Baselink_p.x = x;
+            lidar2Baselink_p.y = y;
+            lidar2Baselink_p.z = z;
+            lidar2Baselink_p.roll = roll;
+            lidar2Baselink_p.pitch = pitch;
+            lidar2Baselink_p.yaw = yaw;
+            std::cout<<"matrix: "<<std::endl<<static_cast<Eigen::Affine3f>( lidar2Baselink_).matrix()<<std::endl;
+        }
+        catch (tf::TransformException ex)
+        {
+            ROS_ERROR("%s",ex.what());
+        }
 
         pubKeyPoses                 = nh.advertise<sensor_msgs::PointCloud2>("lio_sam/mapping/trajectory", 1);
         pubLaserCloudSurround       = nh.advertise<sensor_msgs::PointCloud2>("lio_sam/mapping/map_global", 1);
@@ -872,16 +898,18 @@ public:
 
     void downsampleCurrentScan()
     {
-        // Downsample cloud from current scan
-        laserCloudCornerLastDS->clear();
-        downSizeFilterCorner.setInputCloud(laserCloudCornerLast);
-        downSizeFilterCorner.filter(*laserCloudCornerLastDS);
-        laserCloudCornerLastDSNum = laserCloudCornerLastDS->size();
+      // Downsample cloud from current scan
+      laserCloudCornerLastDS->clear();
+      downSizeFilterCorner.setInputCloud(laserCloudCornerLast);
+      downSizeFilterCorner.filter(*laserCloudCornerLastDS);
+      laserCloudCornerLastDS = transformPointCloud(laserCloudCornerLastDS, &lidar2Baselink_p);
+      laserCloudCornerLastDSNum = laserCloudCornerLastDS->size();
 
-        laserCloudSurfLastDS->clear();
-        downSizeFilterSurf.setInputCloud(laserCloudSurfLast);
-        downSizeFilterSurf.filter(*laserCloudSurfLastDS);
-        laserCloudSurfLastDSNum = laserCloudSurfLastDS->size();
+      laserCloudSurfLastDS->clear();
+      downSizeFilterSurf.setInputCloud(laserCloudSurfLast);
+      downSizeFilterSurf.filter(*laserCloudSurfLastDS);
+      laserCloudSurfLastDS = transformPointCloud(laserCloudSurfLastDS, &lidar2Baselink_p);
+      laserCloudSurfLastDSNum = laserCloudSurfLastDS->size();
     }
 
     void updatePointAssociateToMap()

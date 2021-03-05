@@ -235,8 +235,8 @@ public:
 
         try
         {
-            tfListener.waitForTransform(lidarFrame, baselinkFrame, ros::Time(0), ros::Duration(3.0));
-            tfListener.lookupTransform(lidarFrame, baselinkFrame, ros::Time(0), lidar2Baselink);
+            tfListener.waitForTransform(baselinkFrame, lidarFrame, ros::Time(0), ros::Duration(3.0));
+            tfListener.lookupTransform(baselinkFrame, lidarFrame, ros::Time(0), lidar2Baselink);
             tf::Transform t(lidar2Baselink.getRotation(), lidar2Baselink.getOrigin());
             tf::transformTFToEigen(t, lidar2Baselink_);
             double x, y, z, roll, pitch, yaw;
@@ -247,7 +247,7 @@ public:
             lidar2Baselink_p.roll = roll;
             lidar2Baselink_p.pitch = pitch;
             lidar2Baselink_p.yaw = yaw;
-            std::cout<<"matrix: "<<std::endl<<static_cast<Eigen::Affine3f>( lidar2Baselink_.inverse()).matrix()<<std::endl;
+            std::cout<<"matrix: "<<std::endl<<static_cast<Eigen::Affine3f>( lidar2Baselink_).matrix()<<std::endl;
         }
         catch (tf::TransformException ex)
         {
@@ -1020,13 +1020,13 @@ public:
         laserCloudCornerLastDS->clear();
         downSizeFilterCorner.setInputCloud(laserCloudCornerLast);
         downSizeFilterCorner.filter(*laserCloudCornerLastDS);
-//        laserCloudCornerLastDS = transformPointCloud(laserCloudCornerLastDS, &lidar2Baselink_p);
+        laserCloudCornerLastDS = transformPointCloud(laserCloudCornerLastDS, &lidar2Baselink_p);
         laserCloudCornerLastDSNum = laserCloudCornerLastDS->size();
 
         laserCloudSurfLastDS->clear();
         downSizeFilterSurf.setInputCloud(laserCloudSurfLast);
         downSizeFilterSurf.filter(*laserCloudSurfLastDS);
-//        laserCloudSurfLastDS = transformPointCloud(laserCloudSurfLastDS, &lidar2Baselink_p);
+        laserCloudSurfLastDS = transformPointCloud(laserCloudSurfLastDS, &lidar2Baselink_p);
         laserCloudSurfLastDSNum = laserCloudSurfLastDS->size();
     }
 

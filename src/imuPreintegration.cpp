@@ -51,6 +51,7 @@ public:
             {
                 tfListener.waitForTransform(lidarFrame, baselinkFrame, ros::Time(0), ros::Duration(3.0));
                 tfListener.lookupTransform(lidarFrame, baselinkFrame, ros::Time(0), lidar2Baselink);
+                std::cout<<"imu_l2B: "<<std::endl<<lidar2Baselink.getOrigin().x()<<" "<<lidar2Baselink.getOrigin().z()<<std::endl;
             }
             catch (tf::TransformException ex)
             {
@@ -155,7 +156,7 @@ public:
         static tf::TransformBroadcaster tfOdom2BaseLink;
         tf::Transform tCur;
         tf::poseMsgToTF(laserOdometry.pose.pose, tCur);
-        if(lidarFrame != baselinkFrame)
+        if(lidarFrame == baselinkFrame)
             tCur = tCur * lidar2Baselink;
         tf::StampedTransform odom_2_baselink = tf::StampedTransform(tCur, odomMsg->header.stamp, odometryFrame, baselinkFrame);
         tfOdom2BaseLink.sendTransform(odom_2_baselink);//更新odom到baselink的tf
@@ -235,7 +236,16 @@ public:
 
     IMUPreintegration()
     {
-
+//        try
+//        {
+//            tfListener.waitForTransform(baselinkFrame, lidarFrame, ros::Time(0), ros::Duration(3.0));
+//            tfListener.lookupTransform(baselinkFrame, lidarFrame, ros::Time(0), lidar2Baselink);
+//            std::cout<<"prein_imu_l2B: "<<std::endl<<lidar2Baselink.getOrigin().x()<<" "<<lidar2Baselink.getOrigin().z()<<std::endl;
+//        }
+//        catch (tf::TransformException ex)
+//        {
+//            ROS_ERROR("%s",ex.what());
+//        }
         subImu      = nh.subscribe<sensor_msgs::Imu>  (imuTopic,                   2000, &IMUPreintegration::imuHandler,      this, ros::TransportHints().tcpNoDelay());
         subOdometry = nh.subscribe<nav_msgs::Odometry>("lio_sam/mapping/odometry_incremental", 5,    &IMUPreintegration::odometryHandler, this, ros::TransportHints().tcpNoDelay());
 
@@ -318,7 +328,10 @@ public:
                     break;
             }
             // initial pose
-            prevPose_ = lidarPose.compose(lidar2Imu);//将lidar位姿转换到IMU系下
+            if(lidarFrame == baselinkFrame)
+              prevPose_ = lidarPose.compose(lidar2Imu);//将lidar位姿转换到IMU系下
+            else
+              prevPose_ = lidarPose;
             gtsam::PriorFactor<gtsam::Pose3> priorPose(X(0), prevPose_, priorPoseNoise);//构建因子图优化的位置初值
             graphFactors.add(priorPose);
             // initial velocity
@@ -405,7 +418,11 @@ public:
         graphFactors.add(gtsam::BetweenFactor<gtsam::imuBias::ConstantBias>(B(key - 1), B(key), gtsam::imuBias::ConstantBias(),
                          gtsam::noiseModel::Diagonal::Sigmas(sqrt(imuIntegratorOpt_->deltaTij()) * noiseModelBetweenBias)));
         // add pose factor
-        gtsam::Pose3 curPose = lidarPose.compose(lidar2Imu);
+        gtsam::Pose3 curPose;
+        if(lidarFrame == baselinkFrame)
+          curPose = lidarPose.compose(lidar2Imu);
+        else
+          curPose = lidarPose;
         gtsam::PriorFactor<gtsam::Pose3> pose_factor(X(key), curPose, degenerate ? correctionNoise2 : correctionNoise);
         graphFactors.add(pose_factor);
         // insert predicted values
@@ -455,7 +472,6 @@ public:
                 sensor_msgs::Imu *thisImu = &imuQueImu[i];
                 double imuTime = ROS_TIME(thisImu);
                 double dt = (lastImuQT < 0) ? (1.0 / 500.0) :(imuTime - lastImuQT);
-
                 imuIntegratorImu_->integrateMeasurement(gtsam::Vector3(thisImu->linear_acceleration.x, thisImu->linear_acceleration.y, thisImu->linear_acceleration.z),
                                                         gtsam::Vector3(thisImu->angular_velocity.x,    thisImu->angular_velocity.y,    thisImu->angular_velocity.z), dt);
                 lastImuQT = imuTime;
@@ -489,8 +505,11 @@ public:
     void imuHandler(const sensor_msgs::Imu::ConstPtr& imu_raw)
     {
         std::lock_guard<std::mutex> lock(mtx);
-
-        sensor_msgs::Imu thisImu = imuConverter(*imu_raw);//转到lidar系下
+        sensor_msgs::Imu thisImu;
+        if(lidarFrame == baselinkFrame)
+          thisImu = imuConverter(*imu_raw);//转到lidar系下
+        else
+          thisImu = *imu_raw;
 
         imuQueOpt.push_back(thisImu);
         imuQueImu.push_back(thisImu);
@@ -501,11 +520,9 @@ public:
         double imuTime = ROS_TIME(&thisImu);
         double dt = (lastImuT_imu < 0) ? (1.0 / 500.0) : (imuTime - lastImuT_imu);//初始时lastImuT_imu为-1，此时时间间隔用1/500Hz，如果不是首次，则用当前减上次
         lastImuT_imu = imuTime;
-
         // integrate this single imu message
         imuIntegratorImu_->integrateMeasurement(gtsam::Vector3(thisImu.linear_acceleration.x, thisImu.linear_acceleration.y, thisImu.linear_acceleration.z),
                                                 gtsam::Vector3(thisImu.angular_velocity.x,    thisImu.angular_velocity.y,    thisImu.angular_velocity.z), dt);//进行积分
-
         // predict odometry
         gtsam::NavState currentState = imuIntegratorImu_->predict(prevStateOdom, prevBiasOdom);
 
@@ -517,7 +534,9 @@ public:
 
         // transform imu pose to ldiar
         gtsam::Pose3 imuPose = gtsam::Pose3(currentState.quaternion(), currentState.position());
-        gtsam::Pose3 lidarPose = imuPose.compose(imu2Lidar);
+        gtsam::Pose3 lidarPose;
+        if(lidarFrame == baselinkFrame)
+          lidarPose = imuPose.compose(imu2Lidar);
 
         odometry.pose.pose.position.x = lidarPose.translation().x();
         odometry.pose.pose.position.y = lidarPose.translation().y();
