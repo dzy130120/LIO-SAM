@@ -61,8 +61,8 @@ public:
         map_to_odom = tf::Transform(tf::createQuaternionFromRPY(0, 0, 0), tf::Vector3(0, 0, 0));
 
         subPoseOdomToMap = nh.subscribe<geometry_msgs::PoseStamped>("lio_sam/mapping/pose_odomTo_map", 1,&TransformFusion::odomToMapPoseHandler,      this, ros::TransportHints().tcpNoDelay());
-        subLaserOdometry = nh.subscribe<nav_msgs::Odometry>("lio_sam/mapping/odometry", 5, &TransformFusion::lidarOdometryHandler, this, ros::TransportHints().tcpNoDelay());
-        subImuOdometry   = nh.subscribe<nav_msgs::Odometry>(odomTopic+"_incremental",   2000, &TransformFusion::imuOdometryHandler,   this, ros::TransportHints().tcpNoDelay());
+        subLaserOdometry = nh.subscribe<nav_msgs::Odometry>("lio_sam/mapping/odometry", 5, &TransformFusion::lidarOdometryHandler, this, ros::TransportHints().tcpNoDelay());//后端融合激光的里程计，目前是odom->lidar
+        subImuOdometry   = nh.subscribe<nav_msgs::Odometry>(odomTopic+"_incremental",   2000, &TransformFusion::imuOdometryHandler,   this, ros::TransportHints().tcpNoDelay());//下边预积分发出的imu里程计，这个里程计目前应该是在odom->lidar系下
 
         pubImuOdometry   = nh.advertise<nav_msgs::Odometry>(odomTopic, 2000);
         pubImuPath       = nh.advertise<nav_msgs::Path>    ("lio_sam/imu/path", 1);
@@ -103,7 +103,7 @@ public:
         lidarOdomTime = odomMsg->header.stamp.toSec();
     }
 
-    void imuOdometryHandler(const nav_msgs::Odometry::ConstPtr& odomMsg)
+    void imuOdometryHandler(const nav_msgs::Odometry::ConstPtr& odomMsg)//预积分里程计
     {
         // static tf
         static tf::TransformBroadcaster tfMap2Odom;
@@ -149,7 +149,7 @@ public:
         laserOdometry.pose.pose.position.y = y;
         laserOdometry.pose.pose.position.z = z;
         laserOdometry.pose.pose.orientation = tf::createQuaternionMsgFromRollPitchYaw(roll, pitch, yaw);
-        pubImuOdometry.publish(laserOdometry);
+        pubImuOdometry.publish(laserOdometry);//imu维护的里程计，这个里程计在lidar里程计基础上叠加了预积分
 
         // publish tf
         static tf::TransformBroadcaster tfOdom2BaseLink;
@@ -239,7 +239,7 @@ public:
         subImu      = nh.subscribe<sensor_msgs::Imu>  (imuTopic,                   2000, &IMUPreintegration::imuHandler,      this, ros::TransportHints().tcpNoDelay());
         subOdometry = nh.subscribe<nav_msgs::Odometry>("lio_sam/mapping/odometry_incremental", 5,    &IMUPreintegration::odometryHandler, this, ros::TransportHints().tcpNoDelay());
 
-        pubImuOdometry = nh.advertise<nav_msgs::Odometry> (odomTopic+"_incremental", 2000);//和imageProjection接口
+        pubImuOdometry = nh.advertise<nav_msgs::Odometry> (odomTopic+"_incremental", 2000);//和imageProjection与上边tranform接口
 
         boost::shared_ptr<gtsam::PreintegrationParams> p = gtsam::PreintegrationParams::MakeSharedU(imuGravity);
         p->accelerometerCovariance  = gtsam::Matrix33::Identity(3,3) * pow(imuAccNoise, 2); // acc white noise in continuous
