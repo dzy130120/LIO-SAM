@@ -116,7 +116,7 @@ target_link_libraries(${PROJECT_NAME}_dzyglobalLocalize ${catkin_LIBRARIES} ${PC
 ## Copy launch files
  install(DIRECTORY launch/
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
-  FILES_MATCHING PATTERN "*.launch"
+  FILES_MATCHING PATTERN "*.*"
 )
 
 ## Copy yaml files
