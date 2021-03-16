@@ -490,7 +490,11 @@ public:
     {
         std::lock_guard<std::mutex> lock(mtx);
 
-        sensor_msgs::Imu thisImu = imuConverter(*imu_raw);//转到lidar系下
+        sensor_msgs::Imu::Ptr real_imuMsg;
+        real_imuMsg->linear_acceleration.x = 9.81 * imu_raw->linear_acceleration.x;
+        real_imuMsg->linear_acceleration.y = 9.81 * imu_raw->linear_acceleration.y;
+        real_imuMsg->linear_acceleration.z = 9.81 * imu_raw->linear_acceleration.z;
+        sensor_msgs::Imu thisImu = imuConverter(*real_imuMsg);//转到lidar系下
 
         imuQueOpt.push_back(thisImu);
         imuQueImu.push_back(thisImu);
