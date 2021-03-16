@@ -144,11 +144,11 @@ public:
 
     void imuHandler(const sensor_msgs::Imu::ConstPtr& imuMsg)//缓存imu数据
     {
-        sensor_msgs::Imu::Ptr real_imuMsg;
-        real_imuMsg->linear_acceleration.x = 9.81 * imuMsg->linear_acceleration.x;
-        real_imuMsg->linear_acceleration.y = 9.81 * imuMsg->linear_acceleration.y;
-        real_imuMsg->linear_acceleration.z = 9.81 * imuMsg->linear_acceleration.z;
-        sensor_msgs::Imu thisImu = imuConverter(*real_imuMsg);
+        sensor_msgs::Imu real_imuMsg = *imuMsg;
+        real_imuMsg.linear_acceleration.x = 9.81 * imuMsg->linear_acceleration.x;
+        real_imuMsg.linear_acceleration.y = 9.81 * imuMsg->linear_acceleration.y;
+        real_imuMsg.linear_acceleration.z = 9.81 * imuMsg->linear_acceleration.z;
+        sensor_msgs::Imu thisImu = imuConverter(real_imuMsg);
 
         std::lock_guard<std::mutex> lock1(imuLock);
         imuQueue.push_back(thisImu);

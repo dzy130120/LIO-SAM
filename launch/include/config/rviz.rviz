@@ -4,7 +4,8 @@ Panels:
     Name: Displays
     Property Tree Widget:
       Expanded:
-        - /links1
+        - /links1/map1
+        - /links1/map1/Status1
         - /Odometry1
         - /Point Cloud1
         - /Feature Cloud1
@@ -47,7 +48,7 @@ Visualization Manager:
           Length: 2
           Name: map
           Radius: 0.5
-          Reference Frame: map
+          Reference Frame: map_1
           Value: true
         - Class: rviz/Axes
           Enabled: true
@@ -376,9 +377,9 @@ Visualization Manager:
           Enabled: true
           Invert Rainbow: false
           Max Color: 255; 255; 255
-          Max Intensity: 228
+          Max Intensity: 208
           Min Color: 0; 0; 0
-          Min Intensity: 1
+          Min Intensity: 18.5
           Name: Map (global)
           Position Transformer: XYZ
           Queue Size: 10
@@ -481,7 +482,7 @@ Visualization Manager:
   Global Options:
     Background Color: 0; 0; 0
     Default Light: true
-    Fixed Frame: map
+    Fixed Frame: map_1
     Frame Rate: 30
   Name: root
   Tools:

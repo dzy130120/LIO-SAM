@@ -2,15 +2,15 @@ lio_sam:
 
   # Topics
   pointCloudTopic: "points_raw"               # Point cloud data
-  imuTopic: "imu_correct"                         # IMU data
+  imuTopic: "IMU_data"                         # IMU data
   odomTopic: "odometry/imu"                   # IMU pre-preintegration odometry, same frequency as IMU
   gpsTopic: "odometry/gpsz1"                   # GPS odometry topic from navsat, see module_navsat.launch file
 
   # Frames
   lidarFrame: "laser_link"
   baselinkFrame: "base_link"
-  odometryFrame: "odom"
-  mapFrame: "map"
+  odometryFrame: "odom_1"
+  mapFrame: "map_1"
 
   # GPS Settings
   useImuHeadingInitialization: true           # if using GPS data, set to "true"
@@ -19,7 +19,7 @@ lio_sam:
   poseCovThreshold: 25.0                      # m^2, threshold for using GPS data
 
   # Export settings
-  savePCD: false                               # https://github.com/TixiaoShan/LIO-SAM/issues/3
+  savePCD: true                               # https://github.com/TixiaoShan/LIO-SAM/issues/3
   savePCDDirectory: "/Downloads/LOAM/"        # in your home folder, starts and ends with "/". Warning: the code deletes "LOAM" folder then recreates it. See "mapOptimization" for implementation
 
   # Sensor Settings
@@ -39,7 +39,7 @@ lio_sam:
   imuRPYWeight: 0.01
 
   # Extrinsics (lidar -> IMU)
-  extrinsicTrans: [0.0, 0.0, -0.044]
+  extrinsicTrans: [-0.45, 0.0, 0.3]
   extrinsicRot: [1, 0, 0,
                   0, 1, 0,
                   0, 0, 1]
