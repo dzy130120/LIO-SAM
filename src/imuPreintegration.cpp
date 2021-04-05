@@ -90,7 +90,7 @@ public:
         tf::Vector3 p_tem(poseOdomToMapmsg->pose.position.x, poseOdomToMapmsg->pose.position.y, poseOdomToMapmsg->pose.position.z);
         tf::Transform(q_tem, p_tem);
 
-       map_to_odom = tf::Transform(tf::Quaternion(poseOdomToMapmsg->pose.orientation.x,poseOdomToMapmsg->pose.orientation.y,poseOdomToMapmsg->pose.orientation.z,poseOdomToMapmsg->pose.orientation.w), p_tem);
+        map_to_odom = tf::Transform(tf::Quaternion(poseOdomToMapmsg->pose.orientation.x,poseOdomToMapmsg->pose.orientation.y,poseOdomToMapmsg->pose.orientation.z,poseOdomToMapmsg->pose.orientation.w), p_tem);
         odominit = true;
     }
 
@@ -203,7 +203,6 @@ public:
     gtsam::noiseModel::Diagonal::shared_ptr correctionNoise2;
     gtsam::Vector noiseModelBetweenBias;
 
-
     gtsam::PreintegratedImuMeasurements *imuIntegratorOpt_;
     gtsam::PreintegratedImuMeasurements *imuIntegratorImu_;
 
@@ -300,7 +299,6 @@ public:
         bool degenerate = (int)odomMsg->pose.covariance[0] > 1 ? true : false;
         gtsam::Pose3 lidarPose = gtsam::Pose3(gtsam::Rot3::Quaternion(r_w, r_x, r_y, r_z), gtsam::Point3(p_x, p_y, p_z));
 
-
         // 0. initialize system
         if (systemInitialized == false)
         {
@@ -346,7 +344,6 @@ public:
             return;
         }
 
-
         // reset graph for speed
         if (key == 100)//接收到100次激光里程计
         {
@@ -376,7 +373,6 @@ public:
 
             key = 1;
         }
-
 
         // 1. integrate imu data and optimize
         while (!imuQueOpt.empty())//对上一次odom到这一次odom之间的imu进行积分
@@ -425,14 +421,13 @@ public:
         prevState_ = gtsam::NavState(prevPose_, prevVel_);//获取优化后的状态量
         prevBias_  = result.at<gtsam::imuBias::ConstantBias>(B(key));
         // Reset the optimization preintegration object.
-        imuIntegratorOpt_->resetIntegrationAndSetBias(prevBias_);
+        imuIntegratorOpt_->resetIntegrationAndSetBias(prevBias_);//重置积分变量，并且更新bias
         // check optimization
         if (failureDetection(prevVel_, prevBias_))//判断优化后速度以及bias是否超限
         {
             resetParams();
             return;
         }
-
 
         // 2. after optiization, re-propagate imu odometry preintegration
         prevStateOdom = prevState_;
