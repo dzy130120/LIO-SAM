@@ -39,7 +39,7 @@ lio_sam:
   imuRPYWeight: 0.01
 
   # Extrinsics (lidar -> IMU)
-  extrinsicTrans: [-0.45, 0.0, 0.3]
+  extrinsicTrans: [-0.40501, 0.015, 0.231]
   extrinsicRot: [1, 0, 0,
                   0, 1, 0,
                   0, 0, 1]
